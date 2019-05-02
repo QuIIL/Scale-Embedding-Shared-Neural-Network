@@ -44,7 +44,7 @@ class DatasetSerial(data.Dataset):
 ####
 def prepare_data():
 
-    data_files = '/media/vqdang/Data_2/dang/train/SMHTMAs/core_grade.txt'
+    data_files = '/mnt/dang/data/SMHTMAs/core_grade.txt'
     tma_list = ['160003', '161228', '162350', '163542', '164807']
 
     # label -1 means exclude

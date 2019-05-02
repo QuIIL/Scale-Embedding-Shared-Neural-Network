@@ -194,9 +194,7 @@ class Trainer(Config):
 
         optimizer, optimizer_args = opt['optimizer']
         optimizer = optimizer(net.parameters(), **optimizer_args)
-
-        # TODO: option for scheduler
-        scheduler = opt['scheduler']
+        scheduler = opt['scheduler'](optimizer)
 
         trainer = Engine(lambda engine, batch: self.train_step(net, batch, optimizer, device))
         inferer = Engine(lambda engine, batch: self.infer_step(net, batch, device))
@@ -385,7 +383,8 @@ class Trainer(Config):
                 self.run_once(opt, log_dir, pretrained_path)
                 prev_log_dir = log_dir
         else:
-            self.run_once(phase_opts, self.log_dir, opt['pretrained'])
+            opt = phase_opts[0]
+            self.run_once(opt, self.log_dir, opt['pretrained'])
 
         return
 

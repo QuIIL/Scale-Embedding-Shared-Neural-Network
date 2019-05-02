@@ -46,10 +46,10 @@ class Config(object):
                 self.down_sample_level_list = [5, 4]             
 
         # 
-        self.logging = True # False for debug run to test code
-        self.log_path = '/media/vqdang/Data_2/dang/output/SCALE_EMBEDDING/'
+        self.logging = False # False for debug run to test code
+        self.log_path = '/mnt/dang/output/SCALE_EMBEDDING/'
         self.chkpts_prefix = 'model'
-        self.model_name = 'v1.0.0.0_%s_5scale' % self.exp_mode
+        self.model_name = 'v1.0.0.1_%s' % self.exp_mode
         self.log_dir =  self.log_path + self.model_name
 
     def train_augmentors(self):

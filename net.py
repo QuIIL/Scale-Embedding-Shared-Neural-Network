@@ -101,7 +101,7 @@ class ResNet(nn.Module, Config):
 
                 self.conv_v.append(
                     nn.Sequential(
-                        nn.Conv2d(in_ch, 512, 1, stride=1, padding=0, bias=False),
+                        nn.Conv2d(in_ch, 512, 1, stride=1, padding=0, bias=True),
                         nn.Conv2d( 512, 512, 3, stride=1, padding=1, bias=False),
                         nn.BatchNorm2d(512, eps=1e-5, momentum=0.9),
                         nn.ReLU(inplace=True),
@@ -140,17 +140,18 @@ class ResNet(nn.Module, Config):
             return nn.functional.interpolate(x, size=tuple(size), 
                             mode='bilinear', align_corners=True)
         def extract_feat(imgs):
-            d1 = self.relu(self.bn1(self.conv1(imgs)))
-            d2 = self.maxpool(d1)
-            d2 = self.layer1(d2)
-            d3 = self.layer2(d2)           
+            with torch.no_grad():
+                d1 = self.relu(self.bn1(self.conv1(imgs)))
+                d2 = self.maxpool(d1)
+                d2 = self.layer1(d2)
+                d3 = self.layer2(d2)           
             if not self.freeze:
+                d4 = self.layer3(d3)
+                d5 = self.layer4(d4)
+            else:
                 with torch.no_grad():
                     d4 = self.layer3(d3)
                     d5 = self.layer4(d4)
-            else:
-                d4 = self.layer3(d3)
-                d5 = self.layer4(d4)
             return [d1, d2, d3, d4, d5]
 
         # feature extractor only
@@ -164,19 +165,18 @@ class ResNet(nn.Module, Config):
             aligned_downsample_size = [(aligned_scale_size / 2**i) for i in range(1,6)]
             aligned_downsample_size = [list(size.astype('int32')) for  
                                                         size in aligned_downsample_size]
-            with torch.no_grad():
-                levels_feat_list = [[] for i in range(len(self.down_sample_level_list))] 
-                for scale_idx in enumerate(self.scale_list):
-                    scale_imgs = imgs
-                    scale_size = (scale_unit * scale_idx)
-                    scale_size = list(scale_size.astype('int32'))
-                    if scale_size == self.input_size:
-                        scale_imgs = scale_to(scale_imgs, scale_size)
-                    scale_feat = extract_feat(scale_imgs)
-                    for idx, level in enumerate(self.down_sample_level_list):
-                        aligned_size = aligned_downsample_size[level-1]
-                        aligned_feat = scale_to(scale_feat[level-1], aligned_size)
-                        levels_feat_list[idx].append(aligned_feat)
+            levels_feat_list = [[] for i in range(len(self.down_sample_level_list))] 
+            for scale_idx in self.scale_list:
+                scale_imgs = imgs
+                scale_size = (scale_unit * scale_idx)
+                scale_size = list(scale_size.astype('int32'))
+                if scale_size != self.input_size:
+                    scale_imgs = scale_to(scale_imgs, scale_size)
+                scale_feat = extract_feat(scale_imgs)
+                for idx, level in enumerate(self.down_sample_level_list):
+                    aligned_size = aligned_downsample_size[level-1]
+                    aligned_feat = scale_to(scale_feat[level-1], aligned_size)
+                    levels_feat_list[idx].append(aligned_feat)
 
             level_scale_embedding_feat_list = []
             for idx in range(len(self.down_sample_level_list)):
@@ -192,19 +192,21 @@ class ResNet(nn.Module, Config):
             feat = torch.cat(level_scale_embedding_feat_list, dim=1)
         else:
             scale_unit = np.array(self.input_size) / max(self.scale_list)
-            with torch.no_grad():
-                scale_feat_list = [] 
-                for scale_idx in self.scale_list:
-                    scale_imgs = imgs
-                    scale_size = (scale_unit * scale_idx).astype('int32')
-                    if list(scale_size) == self.input_size:
-                        scale_imgs = scale_to(scale_imgs, scale_size)
-                    # only use features at the last downsampling level
-                    scale_feat = extract_feat(scale_imgs)[-1]
-                    scale_feat = self.gmp(scale_feat)
-                    scale_feat = torch.squeeze(scale_feat)
-                    scale_feat_list.append(scale_feat)
+
+            scale_feat_list = [] 
+            for scale_idx in self.scale_list:
+                scale_imgs = imgs
+                scale_size = (scale_unit * scale_idx).astype('int32')
+                if list(scale_size) != self.input_size:
+                    scale_imgs = scale_to(scale_imgs, scale_size)
+                # print(scale_imgs.size(), scale_size, self.input_size)
+                # only use features at the last downsampling level
+                scale_feat = extract_feat(scale_imgs)[-1]
+                scale_feat = self.gmp(scale_feat)
+                scale_feat = torch.squeeze(scale_feat)
+                scale_feat_list.append(scale_feat)
             scale_feat = torch.stack(scale_feat_list, dim=-1)
+            
             # quy version
             if self.exp_mode == 'scale_add':
                 # NOTE: quy version, likely wrong
